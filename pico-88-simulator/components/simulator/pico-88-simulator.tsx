@@ -8,10 +8,10 @@ import { ControlPanel } from "./control-panel";
 import { CpuStatus } from "./cpu-status";
 import { MemoryView } from "./memory-view";
 import { DisplayUnit } from "./display-unit";
+import { StackView } from "./stack-view";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 
-// v2.3のCPU状態を管理するための型
 type CpuSnapshot = {
   registers: Uint8Array;
   pc: number;
@@ -19,13 +19,15 @@ type CpuSnapshot = {
   flags: { Z: number; N: number; C: number };
   mainMemory: Uint8Array;
   framebuffer: Uint8Array;
+  vram: Uint8Array;
   sevenSegmentValue: number;
-  lastAccessedBank: number; // ★更新点
+  lastAccessedBank: number;
   isHalted: boolean;
 };
 
 export function Pico88Simulator() {
   const cpuRef = useRef(new Pico88CPU());
+
   const [cpuSnapshot, setCpuSnapshot] = useState<CpuSnapshot>({
     registers: new Uint8Array(cpuRef.current.registers),
     pc: cpuRef.current.pc,
@@ -33,8 +35,9 @@ export function Pico88Simulator() {
     flags: { ...cpuRef.current.flags },
     mainMemory: new Uint8Array(cpuRef.current.mainMemory),
     framebuffer: new Uint8Array(cpuRef.current.framebuffer),
+    vram: new Uint8Array(cpuRef.current.vram),
     sevenSegmentValue: cpuRef.current.sevenSegmentValue,
-    lastAccessedBank: cpuRef.current.lastAccessedBank, // ★更新点
+    lastAccessedBank: cpuRef.current.lastAccessedBank,
     isHalted: cpuRef.current.isHalted,
   });
 
@@ -51,8 +54,9 @@ export function Pico88Simulator() {
       flags: { ...cpu.flags },
       mainMemory: new Uint8Array(cpu.mainMemory),
       framebuffer: new Uint8Array(cpu.framebuffer),
+      vram: new Uint8Array(cpu.vram),
       sevenSegmentValue: cpu.sevenSegmentValue,
-      lastAccessedBank: cpu.lastAccessedBank, // ★更新点
+      lastAccessedBank: cpu.lastAccessedBank,
       isHalted: cpu.isHalted,
     });
   }, []);
@@ -62,13 +66,10 @@ export function Pico88Simulator() {
     const pcAddr = cpu.pc;
     const opBefore = cpu.mainMemory[pcAddr] >> 4;
     const subOpBefore = cpu.mainMemory[pcAddr + 1];
-
     cpu.step();
-
     if (opBefore === 0xf && (subOpBefore === 0x10 || subOpBefore === 0x11)) {
       setFlipTrigger((prev) => prev + 1);
     }
-
     updateSnapshot();
   }, [updateSnapshot]);
 
@@ -132,6 +133,7 @@ export function Pico88Simulator() {
             onReset={handleReset}
             onSpeedChange={setSpeed}
           />
+          {/* ★更新点: 横並びのgridを外し、縦並びのflexコンテナにする */}
           <CpuStatus
             registers={cpuSnapshot.registers}
             pc={cpuSnapshot.pc}
@@ -142,8 +144,14 @@ export function Pico88Simulator() {
           />
           <DisplayUnit
             framebuffer={cpuSnapshot.framebuffer}
+            vram={cpuSnapshot.vram}
             sevenSegmentValue={cpuSnapshot.sevenSegmentValue}
             flipTrigger={flipTrigger}
+          />
+          <StackView
+            mainMemory={cpuSnapshot.mainMemory}
+            sp={cpuSnapshot.sp}
+            activeBank={cpuSnapshot.lastAccessedBank}
           />
         </div>
       </div>

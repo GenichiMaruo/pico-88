@@ -2,15 +2,21 @@
 
 import React, { useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Tabsを追加
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 
+/**
+ * DisplayUnitコンポーネントのプロパティ
+ */
 interface DisplayUnitProps {
-  framebuffer: Uint8Array; // メモリ全体ではなくフレームバッファを受け取る
-  sevenSegmentValue: number; // 7セグの値を直接受け取る
+  framebuffer: Uint8Array;
+  vram: Uint8Array; // ★追加: VRAM(バッファ)の状態を受け取る
+  sevenSegmentValue: number;
   flipTrigger: number;
 }
 
+// PICO-88の16色パレット
 const PICO88_PALETTE = [
   "#000000",
   "#1D2B53",
@@ -30,6 +36,9 @@ const PICO88_PALETTE = [
   "#FFCCAA",
 ];
 
+/**
+ * 7セグメントLED単体を表示するコンポーネント
+ */
 const SevenSegmentDisplay = React.memo(({ value }: { value: number }) => {
   const segmentsMap: { [key: string]: number[] } = {
     a: [0, 2, 3, 5, 6, 7, 8, 9, 10, 12, 14, 15],
@@ -82,35 +91,54 @@ const SevenSegmentDisplay = React.memo(({ value }: { value: number }) => {
 });
 SevenSegmentDisplay.displayName = "SevenSegmentDisplay";
 
+/**
+ * キャンバスにピクセルデータを描画するヘルパー関数
+ */
+const drawPixels = (ctx: CanvasRenderingContext2D, data: Uint8Array) => {
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = PICO88_PALETTE[0];
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  const PIXEL_SIZE = ctx.canvas.width / 16;
+  for (let i = 0; i < 128; i++) {
+    const byte = data[i];
+    const color1 = (byte >> 4) & 0x0f;
+    const color2 = byte & 0x0f;
+    const x1 = (i * 2) % 16;
+    const y1 = Math.floor((i * 2) / 16);
+    ctx.fillStyle = PICO88_PALETTE[color1];
+    ctx.fillRect(x1 * PIXEL_SIZE, y1 * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+    ctx.fillStyle = PICO88_PALETTE[color2];
+    ctx.fillRect(
+      (x1 + 1) * PIXEL_SIZE,
+      y1 * PIXEL_SIZE,
+      PIXEL_SIZE,
+      PIXEL_SIZE
+    );
+  }
+};
+
 export function DisplayUnit({
   framebuffer,
+  vram,
   sevenSegmentValue,
   flipTrigger,
 }: DisplayUnitProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const screenCanvasRef = useRef<HTMLCanvasElement>(null);
+  const bufferCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Screen (Framebuffer) の描画
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.imageSmoothingEnabled = false;
-    ctx.fillStyle = PICO88_PALETTE[0];
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    const PIXEL_SIZE = canvas.width / 16;
-    for (let i = 0; i < 128; i++) {
-      const byte = framebuffer[i]; // フレームバッファから読み出し
-      const color1 = (byte >> 4) & 0x0f;
-      const color2 = byte & 0x0f;
-      const x1 = (i * 2) % 16;
-      const y1 = Math.floor((i * 2) / 16);
-      const x2 = (i * 2 + 1) % 16;
-      const y2 = y1;
-      ctx.fillStyle = PICO88_PALETTE[color1];
-      ctx.fillRect(x1 * PIXEL_SIZE, y1 * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
-      ctx.fillStyle = PICO88_PALETTE[color2];
-      ctx.fillRect(x2 * PIXEL_SIZE, y2 * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
-    }
+    const canvas = screenCanvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (ctx) drawPixels(ctx, framebuffer);
   }, [framebuffer, flipTrigger]);
+
+  // Buffer (VRAM) の描画
+  useEffect(() => {
+    const canvas = bufferCanvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (ctx) drawPixels(ctx, vram);
+  }, [vram]);
 
   return (
     <Card>
@@ -118,15 +146,36 @@ export function DisplayUnit({
         <CardTitle>ディスプレイユニット</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col md:flex-row items-center justify-center gap-6 p-4">
-        <div className="w-64 h-64 md:w-80 md:h-80 border-2 border-primary rounded-lg p-2 bg-black">
-          <canvas
-            ref={canvasRef}
-            width="256"
-            height="256"
-            className="w-full h-full"
-          />
-        </div>
+        {/* ★更新点: タブUIでScreenとBufferを囲む */}
+        <Tabs defaultValue="screen" className="w-64 h-auto md:w-80 md:h-auto">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="screen">Screen (表)</TabsTrigger>
+            <TabsTrigger value="buffer">Buffer (裏)</TabsTrigger>
+          </TabsList>
+          <TabsContent value="screen">
+            <div className="mt-2 border-2 border-primary rounded-lg p-2 bg-black">
+              <canvas
+                ref={screenCanvasRef}
+                width="256"
+                height="256"
+                className="w-full h-full"
+              />
+            </div>
+          </TabsContent>
+          <TabsContent value="buffer">
+            <div className="mt-2 border-2 border-dashed border-muted-foreground rounded-lg p-2 bg-black">
+              <canvas
+                ref={bufferCanvasRef}
+                width="256"
+                height="256"
+                className="w-full h-full"
+              />
+            </div>
+          </TabsContent>
+        </Tabs>
+
         <Separator orientation="vertical" className="h-24 hidden md:block" />
+
         <div className="flex flex-col items-center gap-2">
           <Label>I/O Port: 0xFF</Label>
           <SevenSegmentDisplay value={sevenSegmentValue} />
