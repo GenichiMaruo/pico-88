@@ -7,19 +7,13 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
-/**
- * MemoryViewコンポーネントのプロパティ
- */
 interface MemoryViewProps {
-  mainMemory: Uint8Array; // 1KBの全物理メモリ
-  currentBank: number; // CPUが現在アクティブにしているバンク
+  mainMemory: Uint8Array;
+  activeBank: number; // ★更新点
   pc: number;
   sp: number;
 }
 
-/**
- * メモリセル単体の表示コンポーネント
- */
 const MemoryCell = React.memo(
   ({
     address,
@@ -53,37 +47,31 @@ const MemoryCell = React.memo(
 );
 MemoryCell.displayName = "MemoryCell";
 
-/**
- * PICO-88のメインメモリ空間をバンクごとに表示するコンポーネント
- * @param props - mainMemory, currentBank, pc, sp
- */
 export function MemoryView({
   mainMemory,
-  currentBank,
+  activeBank,
   pc,
   sp,
 }: MemoryViewProps) {
-  const [displayedBank, setDisplayedBank] = useState(currentBank);
+  const [displayedBank, setDisplayedBank] = useState(activeBank);
   const [isAutoFollow, setIsAutoFollow] = useState(true);
 
-  // オートモードがオンの時、CPUのアクティブバンクの変更に追従する
   useEffect(() => {
     if (isAutoFollow) {
-      setDisplayedBank(currentBank);
+      setDisplayedBank(activeBank);
     }
-  }, [currentBank, isAutoFollow]);
+  }, [activeBank, isAutoFollow]);
 
   const handleAutoFollowChange = (checked: boolean) => {
     setIsAutoFollow(checked);
     if (checked) {
-      // オートモードをオンにしたら、すぐにCPUの現在バンクに切り替える
-      setDisplayedBank(currentBank);
+      setDisplayedBank(activeBank);
     }
   };
 
   const renderBank = (bankIndex: number) => {
     const bankOffset = bankIndex * 256;
-    const showPointers = bankIndex === currentBank;
+    const showPointers = bankIndex === activeBank;
 
     return (
       <div
@@ -136,7 +124,7 @@ export function MemoryView({
         <Tabs
           value={`bank-${displayedBank}`}
           onValueChange={(value) => {
-            setIsAutoFollow(false); // 手動で切り替えたらオートを解除
+            setIsAutoFollow(false);
             setDisplayedBank(parseInt(value.split("-")[1]));
           }}
           className="flex flex-col h-full"
@@ -146,16 +134,18 @@ export function MemoryView({
               <TabsTrigger
                 key={i}
                 value={`bank-${i}`}
-                className={cn(currentBank === i && "text-blue-500 font-bold")}
-                disabled={isAutoFollow && i !== currentBank} // オートモード中は他のタブを無効化
+                className={cn(activeBank === i && "text-blue-500 font-bold")}
+                disabled={isAutoFollow && i !== activeBank}
               >
-                Bank {i}
+                {" "}
+                Bank {i}{" "}
               </TabsTrigger>
             ))}
           </TabsList>
           {Array.from({ length: 4 }).map((_, i) => (
             <TabsContent key={i} value={`bank-${i}`} className="flex-grow mt-2">
-              {renderBank(i)}
+              {" "}
+              {renderBank(i)}{" "}
             </TabsContent>
           ))}
         </Tabs>

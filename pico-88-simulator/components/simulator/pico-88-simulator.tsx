@@ -11,7 +11,7 @@ import { DisplayUnit } from "./display-unit";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 
-// v2.0のCPU状態を管理するための型
+// v2.3のCPU状態を管理するための型
 type CpuSnapshot = {
   registers: Uint8Array;
   pc: number;
@@ -20,7 +20,7 @@ type CpuSnapshot = {
   mainMemory: Uint8Array;
   framebuffer: Uint8Array;
   sevenSegmentValue: number;
-  currentBank: number;
+  lastAccessedBank: number; // ★更新点
   isHalted: boolean;
 };
 
@@ -34,7 +34,7 @@ export function Pico88Simulator() {
     mainMemory: new Uint8Array(cpuRef.current.mainMemory),
     framebuffer: new Uint8Array(cpuRef.current.framebuffer),
     sevenSegmentValue: cpuRef.current.sevenSegmentValue,
-    currentBank: cpuRef.current.currentBank,
+    lastAccessedBank: cpuRef.current.lastAccessedBank, // ★更新点
     isHalted: cpuRef.current.isHalted,
   });
 
@@ -52,14 +52,14 @@ export function Pico88Simulator() {
       mainMemory: new Uint8Array(cpu.mainMemory),
       framebuffer: new Uint8Array(cpu.framebuffer),
       sevenSegmentValue: cpu.sevenSegmentValue,
-      currentBank: cpu.currentBank,
+      lastAccessedBank: cpu.lastAccessedBank, // ★更新点
       isHalted: cpu.isHalted,
     });
   }, []);
 
   const handleStep = useCallback(() => {
     const cpu = cpuRef.current;
-    const pcAddr = cpu.currentBank * 256 + cpu.pc;
+    const pcAddr = cpu.pc;
     const opBefore = cpu.mainMemory[pcAddr] >> 4;
     const subOpBefore = cpu.mainMemory[pcAddr + 1];
 
@@ -117,7 +117,7 @@ export function Pico88Simulator() {
           <CodeEditor onAssembleRequest={handleAssembleAndLoad} />
           <MemoryView
             mainMemory={cpuSnapshot.mainMemory}
-            currentBank={cpuSnapshot.currentBank}
+            activeBank={cpuSnapshot.lastAccessedBank}
             pc={cpuSnapshot.pc}
             sp={cpuSnapshot.sp}
           />
@@ -138,7 +138,7 @@ export function Pico88Simulator() {
             sp={cpuSnapshot.sp}
             flags={cpuSnapshot.flags}
             isHalted={cpuSnapshot.isHalted}
-            currentBank={cpuSnapshot.currentBank}
+            activeBank={cpuSnapshot.lastAccessedBank}
           />
           <DisplayUnit
             framebuffer={cpuSnapshot.framebuffer}

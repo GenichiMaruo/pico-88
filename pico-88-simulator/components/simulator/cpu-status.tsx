@@ -10,7 +10,7 @@ interface CpuStatusProps {
   sp: number;
   flags: { Z: number; N: number; C: number };
   isHalted: boolean;
-  currentBank: number; // 追加
+  activeBank: number; // ★更新点: currentBank -> activeBank
 }
 
 const ValueDisplay = ({ value }: { value: number }) => (
@@ -31,14 +31,15 @@ export function CpuStatus({
   sp,
   flags,
   isHalted,
-  currentBank,
+  activeBank,
 }: CpuStatusProps) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-4">
         <CardTitle>CPUステータス</CardTitle>
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold">BANK: {currentBank}</span>
+          {/* ★更新点: 最後にアクセスしたバンクを表示 */}
+          <span className="text-sm font-semibold">BANK: {activeBank}</span>
           {isHalted && (
             <span className="text-sm font-bold text-red-500 bg-red-100 px-2 py-1 rounded-md">
               HALTED

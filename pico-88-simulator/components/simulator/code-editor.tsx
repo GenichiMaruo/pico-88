@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -9,32 +9,43 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { assemble } from "@/core/assembler";
 import { toast } from "sonner";
 
+// ★更新点: 新しいサンプルコード
 const sampleCode = `
-// PICO-88 v2.0 Sample Code
-// Bank Switching Demo
+// PICO-88 v2.3 Sample Code
+// Fills the screen with a color gradient,
+// flipping the display one row at a time.
 
-// --- Bank 0 ---
 START:
-  // Write data to Bank 1
-  BANK #1
-  MOV R0, #10      // Address in Bank 1
-  MOV R1, #123     // Data to store
-  ST R1, [R0]      // Store 123 at address 10 in Bank 1
+  BCLS            // Clear the VRAM buffer
+  MOV R2, #0      // R2 = Y counter, start at 0
 
-  // Return to Bank 0 and clear register
-  BANK #0
-  MOV R1, #0
+Y_LOOP:
+  MOV R1, #0      // R1 = X counter, reset for each row
 
-  // Read data from Bank 1
-  BANK #1
-  MOV R0, #10      // Address in Bank 1
-  LD R1, [R0]      // Load data from Bank 1 into R1
+X_LOOP:
+  // Calculate color: C = X + Y
+  MOV R0, R1      // R0 = X
+  ADD R0, R2      // R0 = X + Y
+  MOV R3, R0      // Set R3 (color register) for BPLOT
 
-  // Return to Bank 0 and display the value
-  BANK #0
-  ST R1, [0xFF]    // Show R1's value on 7-seg display
-  
-  HLT
+  // Plot one pixel to the VRAM buffer
+  BPLOT
+
+  // Increment X and loop if not at the end of the row
+  INC R1
+  CMP R1, #16
+  JNZ X_LOOP
+
+  // --- Row finished drawing to buffer ---
+  FLIP            // Flip the entire VRAM to the screen
+
+  // Increment Y and loop if not at the last row
+  INC R2
+  CMP R2, #16
+  JNZ Y_LOOP
+
+ALL_DONE:
+  HLT             // Halt the CPU
 `;
 
 interface CodeEditorProps {
@@ -45,6 +56,14 @@ export function CodeEditor({ onAssembleRequest }: CodeEditorProps) {
   const [asmCode, setAsmCode] = useState(sampleCode.trim());
   const [machineCode, setMachineCode] = useState("");
   const [isAsmMode, setIsAsmMode] = useState(true);
+  const lineNumbersRef = useRef<HTMLPreElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleScroll = () => {
+    if (lineNumbersRef.current && textareaRef.current) {
+      lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
+    }
+  };
 
   const handleModeChange = (checked: boolean) => {
     if (checked) {
@@ -93,18 +112,23 @@ export function CodeEditor({ onAssembleRequest }: CodeEditorProps) {
           </Label>
         </div>
       </CardHeader>
-      <CardContent className="flex-grow flex flex-col gap-2">
-        <div className="flex-grow flex relative border rounded-md">
-          <pre className="text-right p-2.5 bg-muted text-muted-foreground select-none font-mono text-sm leading-6">
+      <CardContent className="flex-grow flex flex-col gap-2 min-h-0">
+        <div className="flex-grow flex relative border rounded-md min-h-0 overflow-hidden">
+          <pre
+            ref={lineNumbersRef}
+            className="text-right p-2.5 bg-muted text-muted-foreground select-none font-mono text-sm leading-6 overflow-hidden"
+          >
             {lineNumbers}
           </pre>
           <Textarea
+            ref={textareaRef}
             value={currentCode}
             onChange={(e) => {
               if (isAsmMode) setAsmCode(e.target.value);
             }}
+            onScroll={handleScroll}
             readOnly={!isAsmMode}
-            className="flex-grow resize-none border-0 rounded-none focus-visible:ring-0 font-mono text-sm leading-6"
+            className="flex-grow resize-none border-0 rounded-none focus-visible:ring-0 font-mono text-sm leading-6 overflow-y-auto"
             placeholder={
               isAsmMode
                 ? "PICO-88アセンブリコードを入力..."
@@ -112,7 +136,7 @@ export function CodeEditor({ onAssembleRequest }: CodeEditorProps) {
             }
           />
         </div>
-        <Button onClick={handleAssembleClick} className="w-full">
+        <Button onClick={handleAssembleClick} className="w-full flex-shrink-0">
           Assemble & Load to Memory
         </Button>
       </CardContent>

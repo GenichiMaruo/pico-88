@@ -1,16 +1,22 @@
-// /core/pico-88-cpu.ts (v2.1 絶対アドレス対応版)
+// /core/pico-88-cpu.ts (v2.3 UI連携強化版)
 
 export class Pico88CPU {
+  // --- CPU State ---
   registers = new Uint8Array(4);
   pc = 0;
   sp = 0;
   flags = { Z: 0, N: 0, C: 0 };
   isHalted = false;
+
+  // --- Memory Architecture v2.2 ---
   mainMemory = new Uint8Array(1024);
   vram = new Uint8Array(128);
   framebuffer = new Uint8Array(128);
   sevenSegmentValue = 0;
-  currentBank = 0;
+
+  private nextBankPrefix: number | null = null;
+  // ★追加点: UI表示用に、最後にメモリアクセスで使われたバンクを保持
+  public lastAccessedBank = 0;
 
   constructor() {
     this.reset();
@@ -26,7 +32,8 @@ export class Pico88CPU {
     this.vram.fill(0);
     this.framebuffer.fill(0);
     this.sevenSegmentValue = 0;
-    this.currentBank = 0;
+    this.nextBankPrefix = null;
+    this.lastAccessedBank = 0; // ★追加点
   }
 
   loadProgram(program: Uint8Array) {
@@ -36,37 +43,57 @@ export class Pico88CPU {
     });
   }
 
+  // --- メモリ・I/Oヘルパー (プレフィックスバンク対応) ---
+  private _getBankToUse(): number {
+    const bank = this.nextBankPrefix ?? 0; // プレフィックスがなければ常にバンク0
+    this.lastAccessedBank = bank; // ★追加点: 使われたバンクを記録
+    this.nextBankPrefix = null; // プレフィックスは1回使ったら消費する
+    return bank;
+  }
+
   private _getMem(addr: number): number {
+    const bank = this._getBankToUse();
     if (addr === 0xff) return this.sevenSegmentValue;
-    if (addr === 0xfe) return this.currentBank;
-    return this.mainMemory[this.currentBank * 256 + addr];
+    if (addr === 0xfe) return bank;
+    return this.mainMemory[bank * 256 + addr];
   }
 
   private _setMem(addr: number, value: number) {
+    const bank = this._getBankToUse();
     if (addr === 0xff) {
       this.sevenSegmentValue = value;
       return;
     }
     if (addr === 0xfe) {
-      this.currentBank = value & 0x03;
-      return;
+      /* No-op */ return;
     }
-    this.mainMemory[this.currentBank * 256 + addr] = value;
+    this.mainMemory[bank * 256 + addr] = value;
   }
 
   step() {
     if (this.isHalted) return;
-    const pcAddr = this.currentBank * 256 + this.pc;
+
+    // フェッチは常にバンク0から行う
+    const pcAddr = this.pc;
     const highByte = this.mainMemory[pcAddr];
     const lowByte = this.mainMemory[pcAddr + 1];
-    this.pc = (this.pc + 2) & 0xff;
 
     const op = (highByte >> 4) & 0x0f;
+
+    if (op === 0xe) {
+      // BANK #imm
+      this.nextBankPrefix = lowByte & 0x03;
+      this.pc = (this.pc + 2) & 0xff;
+      return;
+    }
+
+    this.pc = (this.pc + 2) & 0xff;
     const rd = (highByte >> 2) & 0x03;
     const rs = highByte & 0x03;
     const immediate = lowByte;
     const address = lowByte;
 
+    // (以降の命令セットはv2.1から変更ありません)
     switch (op) {
       case 0x0:
         this.registers[rd] = this.registers[rs];
@@ -158,33 +185,24 @@ export class Pico88CPU {
         this.flags.Z = !this.registers[rd] ? 1 : 0;
         break;
       }
-
-      case 0x4: // LD
+      case 0x4:
       case 0x5: {
-        // ST
-        // ★修正点: sub-opcodeをデコードしてアドレッシングモードを判定
-        if ((highByte & 0x3) === 0x0) {
-          // Indirect: LD/ST [Ra]
+        const subOp = highByte & 0x3;
+        if (subOp === 0) {
           if (op === 0x4) {
-            // LD Rd, [Ra]
             this.registers[rd] = this._getMem(this.registers[rs]);
           } else {
-            // ST Rs, [Ra]
             this._setMem(this.registers[rs], this.registers[rd]);
           }
         } else {
-          // Absolute: LD/ST [addr]
           if (op === 0x4) {
-            // LD Rd, [addr]
             this.registers[rd] = this._getMem(address);
           } else {
-            // ST Rs, [addr]
             this._setMem(address, this.registers[rd]);
           }
         }
         break;
       }
-
       case 0x6: {
         const r = this.registers[rd] - this.registers[rs];
         this.flags.Z = (r & 0xff) === 0 ? 1 : 0;
@@ -247,10 +265,6 @@ export class Pico88CPU {
         else if (s === 0x1)
           this.registers[rd] = (this.registers[rd] - 1) & 0xff;
         this.flags.Z = !this.registers[rd] ? 1 : 0;
-        break;
-      }
-      case 0xe: {
-        this.currentBank = immediate & 0x03;
         break;
       }
       case 0xf: {
