@@ -1,4 +1,4 @@
-// /core/pico-88-cpu.ts (v2.3 UI連携強化版)
+// /core/pico-88-cpu.ts (リセット動作改善版)
 
 export class Pico88CPU {
   // --- CPU State ---
@@ -8,21 +8,43 @@ export class Pico88CPU {
   flags = { Z: 0, N: 0, C: 0 };
   isHalted = false;
 
-  // --- Memory Architecture v2.2 ---
+  // --- Memory Architecture ---
   mainMemory = new Uint8Array(1024);
   vram = new Uint8Array(128);
   framebuffer = new Uint8Array(128);
   sevenSegmentValue = 0;
 
   private nextBankPrefix: number | null = null;
-  // ★追加点: UI表示用に、最後にメモリアクセスで使われたバンクを保持
   public lastAccessedBank = 0;
+
+  // ★追加点: ロード直後のメモリ状態を保存するための領域
+  private initialMainMemory = new Uint8Array(1024);
 
   constructor() {
     this.reset();
   }
 
   reset() {
+    // レジスタやフラグなどのCPU状態をリセット
+    this.registers.fill(0);
+    this.pc = 0;
+    this.sp = 0xff;
+    this.flags = { Z: 0, N: 0, C: 0 };
+    this.isHalted = false;
+
+    // ★更新点: メモリを0で埋めるのではなく、ロード直後の状態に復元
+    this.mainMemory.set(this.initialMainMemory);
+
+    // VRAMやフレームバッファはクリアする
+    this.vram.fill(0);
+    this.framebuffer.fill(0);
+    this.sevenSegmentValue = 0;
+    this.nextBankPrefix = null;
+    this.lastAccessedBank = 0;
+  }
+
+  loadProgram(program: Uint8Array) {
+    // まず、すべての状態を完全にクリアする
     this.registers.fill(0);
     this.pc = 0;
     this.sp = 0xff;
@@ -33,20 +55,21 @@ export class Pico88CPU {
     this.framebuffer.fill(0);
     this.sevenSegmentValue = 0;
     this.nextBankPrefix = null;
-    this.lastAccessedBank = 0; // ★追加点
-  }
+    this.lastAccessedBank = 0;
 
-  loadProgram(program: Uint8Array) {
-    this.reset();
+    // プログラムをメインメモリのバンク0にロード
     program.forEach((byte, index) => {
       if (index <= 0xfd) this.mainMemory[index] = byte;
     });
+
+    // ★更新点: ロードしたプログラムを含むメモリ状態を「初期状態」として保存
+    this.initialMainMemory.set(this.mainMemory);
   }
 
   // --- メモリ・I/Oヘルパー (プレフィックスバンク対応) ---
   private _getBankToUse(): number {
-    const bank = this.nextBankPrefix ?? 0; // プレフィックスがなければ常にバンク0
-    this.lastAccessedBank = bank; // ★追加点: 使われたバンクを記録
+    const bank = this.nextBankPrefix ?? 0;
+    this.lastAccessedBank = bank;
     this.nextBankPrefix = null; // プレフィックスは1回使ったら消費する
     return bank;
   }
@@ -73,7 +96,8 @@ export class Pico88CPU {
   step() {
     if (this.isHalted) return;
 
-    // フェッチは常にバンク0から行う
+    this.lastAccessedBank = 0;
+
     const pcAddr = this.pc;
     const highByte = this.mainMemory[pcAddr];
     const lowByte = this.mainMemory[pcAddr + 1];
@@ -81,7 +105,6 @@ export class Pico88CPU {
     const op = (highByte >> 4) & 0x0f;
 
     if (op === 0xe) {
-      // BANK #imm
       this.nextBankPrefix = lowByte & 0x03;
       this.pc = (this.pc + 2) & 0xff;
       return;
@@ -93,7 +116,6 @@ export class Pico88CPU {
     const immediate = lowByte;
     const address = lowByte;
 
-    // (以降の命令セットはv2.1から変更ありません)
     switch (op) {
       case 0x0:
         this.registers[rd] = this.registers[rs];

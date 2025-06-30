@@ -2,21 +2,17 @@
 
 import React, { useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Tabsを追加
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 
-/**
- * DisplayUnitコンポーネントのプロパティ
- */
 interface DisplayUnitProps {
   framebuffer: Uint8Array;
-  vram: Uint8Array; // ★追加: VRAM(バッファ)の状態を受け取る
+  vram: Uint8Array;
   sevenSegmentValue: number;
   flipTrigger: number;
 }
 
-// PICO-88の16色パレット
 const PICO88_PALETTE = [
   "#000000",
   "#1D2B53",
@@ -36,15 +32,13 @@ const PICO88_PALETTE = [
   "#FFCCAA",
 ];
 
-/**
- * 7セグメントLED単体を表示するコンポーネント
- */
-const SevenSegmentDisplay = React.memo(({ value }: { value: number }) => {
+const SevenSegmentDigit = React.memo(({ value }: { value: number }) => {
+  // ★修正点: 0-Fまでの16進数表示に対応した、正しいセグメントマップ
   const segmentsMap: { [key: string]: number[] } = {
     a: [0, 2, 3, 5, 6, 7, 8, 9, 10, 12, 14, 15],
     b: [0, 1, 2, 3, 4, 7, 8, 9, 10, 13],
-    c: [0, 1, 3, 4, 5, 6, 7, 8, 9, 11, 13],
-    d: [0, 2, 3, 5, 6, 8, 9, 11, 12, 13, 14],
+    c: [0, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13],
+    d: [0, 2, 3, 5, 6, 8, 11, 12, 13, 14],
     e: [0, 2, 6, 8, 10, 11, 12, 13, 14, 15],
     f: [0, 4, 5, 6, 8, 9, 10, 11, 12, 14, 15],
     g: [2, 3, 4, 5, 6, 8, 9, 10, 11, 13, 14, 15],
@@ -52,7 +46,7 @@ const SevenSegmentDisplay = React.memo(({ value }: { value: number }) => {
   const isOn = (segment: string) => segmentsMap[segment].includes(value & 0xf);
   return (
     <div className="bg-gray-800 p-2 rounded-lg">
-      <svg viewBox="0 0 52 88" className="w-16 h-auto">
+      <svg viewBox="0 0 52 88" className="w-12 h-auto">
         <g transform="translate(2, 2)">
           <polygon
             points="6,0 40,0 46,6 40,12 6,12 0,6"
@@ -89,11 +83,8 @@ const SevenSegmentDisplay = React.memo(({ value }: { value: number }) => {
     </div>
   );
 });
-SevenSegmentDisplay.displayName = "SevenSegmentDisplay";
+SevenSegmentDigit.displayName = "SevenSegmentDigit";
 
-/**
- * キャンバスにピクセルデータを描画するヘルパー関数
- */
 const drawPixels = (ctx: CanvasRenderingContext2D, data: Uint8Array) => {
   ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = PICO88_PALETTE[0];
@@ -126,19 +117,18 @@ export function DisplayUnit({
   const screenCanvasRef = useRef<HTMLCanvasElement>(null);
   const bufferCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Screen (Framebuffer) の描画
   useEffect(() => {
     const canvas = screenCanvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (ctx) drawPixels(ctx, framebuffer);
+    if (canvas) drawPixels(canvas.getContext("2d")!, framebuffer);
   }, [framebuffer, flipTrigger]);
 
-  // Buffer (VRAM) の描画
   useEffect(() => {
     const canvas = bufferCanvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (ctx) drawPixels(ctx, vram);
+    if (canvas) drawPixels(canvas.getContext("2d")!, vram);
   }, [vram]);
+
+  const leftDigit = (sevenSegmentValue >> 4) & 0xf;
+  const rightDigit = sevenSegmentValue & 0xf;
 
   return (
     <Card>
@@ -146,7 +136,6 @@ export function DisplayUnit({
         <CardTitle>ディスプレイユニット</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col md:flex-row items-center justify-center gap-6 p-4">
-        {/* ★更新点: タブUIでScreenとBufferを囲む */}
         <Tabs defaultValue="screen" className="w-64 h-auto md:w-80 md:h-auto">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="screen">Screen (表)</TabsTrigger>
@@ -173,12 +162,13 @@ export function DisplayUnit({
             </div>
           </TabsContent>
         </Tabs>
-
         <Separator orientation="vertical" className="h-24 hidden md:block" />
-
         <div className="flex flex-col items-center gap-2">
           <Label>I/O Port: 0xFF</Label>
-          <SevenSegmentDisplay value={sevenSegmentValue} />
+          <div className="flex gap-2">
+            <SevenSegmentDigit value={leftDigit} />
+            <SevenSegmentDigit value={rightDigit} />
+          </div>
         </div>
       </CardContent>
     </Card>

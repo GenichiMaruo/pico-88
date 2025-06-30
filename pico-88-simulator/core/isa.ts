@@ -1,13 +1,7 @@
-// /core/isa.ts (v2.1)
+// /core/isa.ts (v2.2)
 
 export enum FormatType {
-  R, // Register-to-Register
-  I, // Immediate
-  M, // Memory (Register Indirect)
-  J, // Jump
-  U, // Unary (one register)
-  S, // System / No operand
-  A, // Absolute Address
+  R, I, M, J, U, S, A
 }
 
 export const ISA = {
@@ -17,18 +11,18 @@ export const ISA = {
   'SUB':    { op: 0x2, sub: 0x1, format: FormatType.R },
   'MUL':    { op: 0x2, sub: 0x2, format: FormatType.R },
   'DIV':    { op: 0x2, sub: 0x3, format: FormatType.R },
-  'AND':    { op: 0x3, sub: 0x0, format: FormatType.R },
-  'OR':     { op: 0x3, sub: 0x1, format: FormatType.R },
-  'XOR':    { op: 0x3, sub: 0x2, format: FormatType.R },
+  'AND_RR': { op: 0x3, sub: 0x0, format: FormatType.R },
+  'OR_RR':  { op: 0x3, sub: 0x1, format: FormatType.R },
+  'XOR_RR': { op: 0x3, sub: 0x2, format: FormatType.R },
   'NOT':    { op: 0x3, sub: 0x3, format: FormatType.U },
   'SHL':    { op: 0x3, sub: 0x4, format: FormatType.U },
   'SHR':    { op: 0x3, sub: 0x5, format: FormatType.U },
   'ROL':    { op: 0x3, sub: 0x6, format: FormatType.U },
   'ROR':    { op: 0x3, sub: 0x7, format: FormatType.U },
-  'LD_INDIRECT':  { op: 0x4, sub: 0x0, format: FormatType.M }, // LD Rd, [Ra]
-  'LD_ABSOLUTE':  { op: 0x4, sub: 0x1, format: FormatType.A }, // LD Rd, [addr]
-  'ST_INDIRECT':  { op: 0x5, sub: 0x0, format: FormatType.M }, // ST Rs, [Ra]
-  'ST_ABSOLUTE':  { op: 0x5, sub: 0x1, format: FormatType.A }, // ST Rs, [addr]
+  'LD_INDIRECT':  { op: 0x4, sub: 0x0, format: FormatType.M },
+  'LD_ABSOLUTE':  { op: 0x4, sub: 0x1, format: FormatType.A },
+  'ST_INDIRECT':  { op: 0x5, sub: 0x0, format: FormatType.M },
+  'ST_ABSOLUTE':  { op: 0x5, sub: 0x1, format: FormatType.A },
   'CMP_RR': { op: 0x6, sub: 0x0, format: FormatType.R },
   'CMP_RI': { op: 0x7, sub: 0x0, format: FormatType.I },
   'JMP':    { op: 0x8, sub: 0x0, format: FormatType.J },
@@ -42,6 +36,9 @@ export const ISA = {
   'POPALL': { op: 0xC, sub: 0xF1, format: FormatType.S },
   'INC':    { op: 0xD, sub: 0x0, format: FormatType.U },
   'DEC':    { op: 0xD, sub: 0x1, format: FormatType.U },
+  'AND_RI': { op: 0xD, sub: 0x2, format: FormatType.I },
+  'OR_RI':  { op: 0xD, sub: 0x3, format: FormatType.I },
+  'XOR_RI': { op: 0xD, sub: 0x4, format: FormatType.I },
   'BANK':   { op: 0xE, sub: 0x0, format: FormatType.I },
   // System/IO
   'NOP':    { op: 0xF, sub: 0x00, format: FormatType.S },

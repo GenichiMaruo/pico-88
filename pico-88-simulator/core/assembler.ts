@@ -1,24 +1,24 @@
-// /core/assembler.ts (v2.2 絶対アドレス対応版)
+// /core/assembler.ts (オペランド解決 修正版)
 import { ISA, FormatType } from "./isa";
 
-export interface AssembleResult {
+// 型定義: AssembleResult
+export type AssembleResult = {
   bytecode: Uint8Array;
   sourceMap: Map<number, number>;
   error?: string;
   errorLine?: number;
-}
+};
 
+// (parseRegister, parseValue関数は変更なし)
 const parseRegister = (reg: string): number | null => {
   if (!reg || !/^[Rr][0-3]$/.test(reg)) return null;
   return parseInt(reg.substring(1), 10);
 };
-
 const parseValue = (val: string): number | null => {
   if (!val) return null;
-  const value = val.startsWith("#") ? val.substring(1) : val;
-  if (value.toLowerCase().startsWith("0x"))
-    return parseInt(value.substring(2), 16);
-  if (/^\d+$/.test(value)) return parseInt(value, 10);
+  const v = val.startsWith("#") ? val.substring(1) : val;
+  if (v.toLowerCase().startsWith("0x")) return parseInt(v.substring(2), 16);
+  if (/^\d+$/.test(v)) return parseInt(v, 10);
   return null;
 };
 
@@ -34,7 +34,7 @@ export function assemble(sourceCode: string): AssembleResult {
     offset: number;
   }[] = [];
 
-  // 1パス目: ラベルの位置を解決
+  // 1パス目
   let currentAddress = 0;
   for (let i = 0; i < lines.length; i++) {
     const lineNumber = i + 1;
@@ -59,79 +59,116 @@ export function assemble(sourceCode: string): AssembleResult {
       labels.set(label, currentAddress);
       continue;
     }
-    currentAddress += 2;
+    const parts = line
+      .replace(/,/g, " ")
+      .split(/\s+/)
+      .filter((s) => s);
+    if (parts[0].toUpperCase() === "DB") {
+      currentAddress += parts.length - 1;
+    } else {
+      currentAddress += 2;
+    }
   }
 
-  // 2パス目: バイトコード生成
+  // 2パス目
   currentAddress = 0;
   for (let i = 0; i < lines.length; i++) {
     const lineNumber = i + 1;
     const line = lines[i].split("//")[0].trim();
     if (!line || line.endsWith(":")) continue;
 
-    const mnemonic = line.split(/\s+/)[0];
+    const mnemonic = line.split(/\s+/)[0].toUpperCase();
     const operandStr = line.substring(mnemonic.length).trim();
-
-    let instruction;
     let operands = operandStr
       .replace(/,/g, " ")
       .split(/\s+/)
       .filter((s) => s);
 
-    // LD/ST命令を特別に解決
-    if (mnemonic.toUpperCase() === "LD" || mnemonic.toUpperCase() === "ST") {
+    if (mnemonic === "DB") {
+      for (const op of operands) {
+        const value = parseValue(op);
+        if (value === null || value < 0 || value > 255)
+          return {
+            bytecode: new Uint8Array(),
+            sourceMap,
+            error: `Invalid byte value in DB directive: ${op}`,
+            errorLine: lineNumber,
+          };
+        bytecode.push(value);
+        sourceMap.set(currentAddress, lineNumber);
+        currentAddress++;
+      }
+      continue;
+    }
+
+    let instruction;
+
+    // ★修正点: オペランドの種類に基づいて、より正確に命令を解決する
+    const isRegToReg =
+      operands.length > 1 && parseRegister(operands[1]) !== null;
+
+    if (mnemonic === "MOV") {
+      if (operands.length < 2)
+        return {
+          bytecode: new Uint8Array(),
+          sourceMap,
+          error: `Insufficient operands for MOV`,
+          errorLine: lineNumber,
+        };
+      instruction = isRegToReg ? ISA.MOV_RR : ISA.MOV_RI;
+    } else if (mnemonic === "CMP") {
+      if (operands.length < 2)
+        return {
+          bytecode: new Uint8Array(),
+          sourceMap,
+          error: `Insufficient operands for CMP`,
+          errorLine: lineNumber,
+        };
+      instruction = isRegToReg ? ISA.CMP_RR : ISA.CMP_RI;
+    } else if (mnemonic === "AND") {
+      if (operands.length < 2)
+        return {
+          bytecode: new Uint8Array(),
+          sourceMap,
+          error: `Insufficient operands for AND`,
+          errorLine: lineNumber,
+        };
+      instruction = isRegToReg ? ISA.AND_RR : ISA.AND_RI;
+    } else if (mnemonic === "OR") {
+      if (operands.length < 2)
+        return {
+          bytecode: new Uint8Array(),
+          sourceMap,
+          error: `Insufficient operands for OR`,
+          errorLine: lineNumber,
+        };
+      instruction = isRegToReg ? ISA.OR_RR : ISA.OR_RI;
+    } else if (mnemonic === "XOR") {
+      if (operands.length < 2)
+        return {
+          bytecode: new Uint8Array(),
+          sourceMap,
+          error: `Insufficient operands for XOR`,
+          errorLine: lineNumber,
+        };
+      instruction = isRegToReg ? ISA.XOR_RR : ISA.XOR_RI;
+    } else if (mnemonic === "LD" || mnemonic === "ST") {
       const addrPart = operandStr.match(/\[(.*?)\]/);
       if (addrPart) {
         const content = addrPart[1].trim();
-        // 角括弧の中身がレジスタかどうかで分岐
-        if (parseRegister(content) !== null) {
-          instruction =
-            mnemonic.toUpperCase() === "LD" ? ISA.LD_INDIRECT : ISA.ST_INDIRECT;
-        } else {
-          instruction =
-            mnemonic.toUpperCase() === "LD" ? ISA.LD_ABSOLUTE : ISA.ST_ABSOLUTE;
-        }
-        // オペランドを再構築 [レジスタ, 角括弧の中身]
+        instruction =
+          parseRegister(content) !== null
+            ? mnemonic === "LD"
+              ? ISA.LD_INDIRECT
+              : ISA.ST_INDIRECT
+            : mnemonic === "LD"
+            ? ISA.LD_ABSOLUTE
+            : ISA.ST_ABSOLUTE;
         operands = [operandStr.split(",")[0].trim(), content];
       }
     } else {
-      // その他の命令
-      let key = Object.keys(ISA).find(
-        (k) => k.toUpperCase() === mnemonic.toUpperCase()
-      );
-      if (mnemonic.toUpperCase() === "JC") key = "JC"; // JCを優先
-      if (key && !key.startsWith("LD_") && !key.startsWith("ST_")) {
-        instruction = ISA[key as keyof typeof ISA];
-      }
-    }
-
-    // MOV/CMPなどオペランドで決まる命令の解決
-    if (!instruction) {
-      if (mnemonic.toUpperCase() === "MOV") {
-        if (operands.length < 2)
-          return {
-            bytecode: new Uint8Array(),
-            sourceMap,
-            error: `Insufficient operands for MOV`,
-            errorLine: lineNumber,
-          };
-        instruction =
-          operands[1].startsWith("#") || parseValue(operands[1]) !== null
-            ? ISA.MOV_RI
-            : ISA.MOV_RR;
-      } else if (mnemonic.toUpperCase() === "CMP") {
-        if (operands.length < 2)
-          return {
-            bytecode: new Uint8Array(),
-            sourceMap,
-            error: `Insufficient operands for CMP`,
-            errorLine: lineNumber,
-          };
-        instruction =
-          operands[1].startsWith("#") || parseValue(operands[1]) !== null
-            ? ISA.CMP_RI
-            : ISA.CMP_RR;
-      }
+      const key = Object.keys(ISA).find((k) => k === mnemonic);
+      if (key) instruction = ISA[key as keyof typeof ISA];
     }
 
     if (!instruction)
@@ -183,19 +220,20 @@ export function assemble(sourceCode: string): AssembleResult {
             errorLine: lineNumber,
           };
         if (!isBank) highByte |= rd << 2;
+
+        if (instruction.op === 0xd) {
+          highByte |= instruction.sub;
+        }
+
         const value = parseValue(valueOperand);
         if (value === null) {
-          if (valueOperand.startsWith("#"))
-            return {
-              bytecode: new Uint8Array(),
-              sourceMap,
-              error: `Invalid immediate value: ${valueOperand}`,
-              errorLine: lineNumber,
-            };
+          const labelName = valueOperand.startsWith("#")
+            ? valueOperand.substring(1)
+            : valueOperand;
           patches.push({
             line: lineNumber,
             type: "I",
-            label: valueOperand.toUpperCase(),
+            label: labelName.toUpperCase(),
             offset: currentAddress + 1,
           });
         } else {
@@ -211,7 +249,6 @@ export function assemble(sourceCode: string): AssembleResult {
         break;
       }
       case FormatType.M: {
-        // Indirect: ST Rs, [Ra]
         const rd_or_rs = parseRegister(operands[0]);
         const ra = parseRegister(operands[1]);
         if (rd_or_rs === null || ra === null)
@@ -229,7 +266,6 @@ export function assemble(sourceCode: string): AssembleResult {
         break;
       }
       case FormatType.A: {
-        // Absolute: ST Rs, [addr]
         const rd_or_rs = parseRegister(operands[0]);
         if (rd_or_rs === null)
           return {
@@ -239,6 +275,7 @@ export function assemble(sourceCode: string): AssembleResult {
             errorLine: lineNumber,
           };
         highByte |= rd_or_rs << 2;
+        highByte |= instruction.sub & 0x3;
         const value = parseValue(operands[1]);
         if (value === null) {
           patches.push({
@@ -257,8 +294,6 @@ export function assemble(sourceCode: string): AssembleResult {
             };
           lowByte = value;
         }
-        // highByteのサブオペコード部分に、絶対アドレスモードを示す値をセット
-        highByte |= instruction.sub & 0x3;
         break;
       }
       case FormatType.J: {
@@ -270,7 +305,7 @@ export function assemble(sourceCode: string): AssembleResult {
             error: `Missing label for ${mnemonic}`,
             errorLine: lineNumber,
           };
-        if (mnemonic.toUpperCase() === "JC") highByte |= ISA.JC.sub << 2;
+        if (mnemonic === "JC") highByte |= ISA.JC.sub << 2;
         const address = labels.get(label.toUpperCase());
         if (address === undefined) {
           patches.push({
@@ -290,7 +325,6 @@ export function assemble(sourceCode: string): AssembleResult {
     currentAddress += 2;
   }
 
-  // 最終パス
   for (const patch of patches) {
     const address = labels.get(patch.label);
     if (address === undefined)
@@ -309,6 +343,5 @@ export function assemble(sourceCode: string): AssembleResult {
       };
     bytecode[patch.offset] = address;
   }
-
   return { bytecode: new Uint8Array(bytecode), sourceMap };
 }

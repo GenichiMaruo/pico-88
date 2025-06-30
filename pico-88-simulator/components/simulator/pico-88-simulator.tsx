@@ -124,6 +124,12 @@ export function Pico88Simulator() {
           />
         </div>
         <div className="w-full lg:w-1/2 flex flex-col gap-4 overflow-y-auto">
+          <DisplayUnit
+            framebuffer={cpuSnapshot.framebuffer}
+            vram={cpuSnapshot.vram}
+            sevenSegmentValue={cpuSnapshot.sevenSegmentValue}
+            flipTrigger={flipTrigger}
+          />
           <ControlPanel
             isRunning={isRunning}
             isHalted={cpuSnapshot.isHalted}
@@ -141,12 +147,6 @@ export function Pico88Simulator() {
             flags={cpuSnapshot.flags}
             isHalted={cpuSnapshot.isHalted}
             activeBank={cpuSnapshot.lastAccessedBank}
-          />
-          <DisplayUnit
-            framebuffer={cpuSnapshot.framebuffer}
-            vram={cpuSnapshot.vram}
-            sevenSegmentValue={cpuSnapshot.sevenSegmentValue}
-            flipTrigger={flipTrigger}
           />
           <StackView
             mainMemory={cpuSnapshot.mainMemory}
