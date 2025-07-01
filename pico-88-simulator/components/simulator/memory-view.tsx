@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils";
 
 interface MemoryViewProps {
   mainMemory: Uint8Array;
-  activeBank: number; // ★更新点
+  stackMemory: Uint8Array;
+  activeBank: number;
   pc: number;
   sp: number;
 }
@@ -49,30 +50,39 @@ MemoryCell.displayName = "MemoryCell";
 
 export function MemoryView({
   mainMemory,
+  stackMemory,
   activeBank,
   pc,
   sp,
 }: MemoryViewProps) {
-  const [displayedBank, setDisplayedBank] = useState(activeBank);
+  const [displayedTab, setDisplayedTab] = useState<string>(
+    `bank-${activeBank}`
+  );
   const [isAutoFollow, setIsAutoFollow] = useState(true);
 
   useEffect(() => {
     if (isAutoFollow) {
-      setDisplayedBank(activeBank);
+      setDisplayedTab(`bank-${activeBank}`);
     }
   }, [activeBank, isAutoFollow]);
 
   const handleAutoFollowChange = (checked: boolean) => {
     setIsAutoFollow(checked);
     if (checked) {
-      setDisplayedBank(activeBank);
+      setDisplayedTab(`bank-${activeBank}`);
     }
   };
 
-  const renderBank = (bankIndex: number) => {
-    const bankOffset = bankIndex * 256;
-    const showPointers = bankIndex === activeBank;
+  const handleTabChange = (value: string) => {
+    setIsAutoFollow(false);
+    setDisplayedTab(value);
+  };
 
+  const renderMemoryGrid = (
+    memory: Uint8Array,
+    showPc: boolean,
+    showSp: boolean
+  ) => {
     return (
       <div
         className="grid grid-cols-16 gap-0.5"
@@ -80,11 +90,11 @@ export function MemoryView({
       >
         {Array.from({ length: 256 }).map((_, i) => (
           <MemoryCell
-            key={bankOffset + i}
+            key={i}
             address={i}
-            value={mainMemory[bankOffset + i]}
-            isPc={showPointers && i === pc}
-            isSp={showPointers && i === sp}
+            value={memory[i]}
+            isPc={showPc && i === pc}
+            isSp={showSp && i === sp}
           />
         ))}
       </div>
@@ -96,7 +106,7 @@ export function MemoryView({
       <CardHeader>
         <div className="flex justify-between items-start">
           <div>
-            <CardTitle>メインメモリビュー</CardTitle>
+            <CardTitle>メモリビュー</CardTitle>
             <div className="flex items-center gap-4 text-xs pt-2">
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-full bg-blue-500"></div>PC
@@ -122,14 +132,11 @@ export function MemoryView({
       </CardHeader>
       <CardContent className="flex-grow">
         <Tabs
-          value={`bank-${displayedBank}`}
-          onValueChange={(value) => {
-            setIsAutoFollow(false);
-            setDisplayedBank(parseInt(value.split("-")[1]));
-          }}
+          value={displayedTab}
+          onValueChange={handleTabChange}
           className="flex flex-col h-full"
         >
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             {Array.from({ length: 4 }).map((_, i) => (
               <TabsTrigger
                 key={i}
@@ -137,17 +144,25 @@ export function MemoryView({
                 className={cn(activeBank === i && "text-blue-500 font-bold")}
                 disabled={isAutoFollow && i !== activeBank}
               >
-                {" "}
-                Bank {i}{" "}
+                Bank {i}
               </TabsTrigger>
             ))}
+            <TabsTrigger value="stack" disabled={isAutoFollow}>
+              Stack
+            </TabsTrigger>
           </TabsList>
           {Array.from({ length: 4 }).map((_, i) => (
             <TabsContent key={i} value={`bank-${i}`} className="flex-grow mt-2">
-              {" "}
-              {renderBank(i)}{" "}
+              {renderMemoryGrid(
+                mainMemory.slice(i * 256, (i + 1) * 256),
+                i === activeBank,
+                false
+              )}
             </TabsContent>
           ))}
+          <TabsContent value="stack" className="flex-grow mt-2">
+            {renderMemoryGrid(stackMemory, false, true)}
+          </TabsContent>
         </Tabs>
       </CardContent>
     </Card>
