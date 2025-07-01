@@ -5,12 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from "lucide-react";
 
 interface DisplayUnitProps {
   framebuffer: Uint8Array;
   vram: Uint8Array;
-  sevenSegmentValue: number;
+  sevenSegmentMemory: Uint8Array;
   flipTrigger: number;
+  onButtonChange: (buttonIndex: number, isPressed: boolean) => void;
 }
 
 const PICO88_PALETTE = [
@@ -33,7 +36,6 @@ const PICO88_PALETTE = [
 ];
 
 const SevenSegmentDigit = React.memo(({ value }: { value: number }) => {
-  // ★修正点: 0-Fまでの16進数表示に対応した、正しいセグメントマップ
   const segmentsMap: { [key: string]: number[] } = {
     a: [0, 2, 3, 5, 6, 7, 8, 9, 10, 12, 14, 15],
     b: [0, 1, 2, 3, 4, 7, 8, 9, 10, 13],
@@ -45,8 +47,8 @@ const SevenSegmentDigit = React.memo(({ value }: { value: number }) => {
   };
   const isOn = (segment: string) => segmentsMap[segment].includes(value & 0xf);
   return (
-    <div className="bg-gray-800 p-2 rounded-lg">
-      <svg viewBox="0 0 52 88" className="w-12 h-auto">
+    <div className="bg-gray-800 p-1 rounded-md">
+      <svg viewBox="0 0 52 88" className="w-8 h-auto">
         <g transform="translate(2, 2)">
           <polygon
             points="6,0 40,0 46,6 40,12 6,12 0,6"
@@ -108,11 +110,43 @@ const drawPixels = (ctx: CanvasRenderingContext2D, data: Uint8Array) => {
   }
 };
 
+const ControlButton = ({
+  onButtonChange,
+  buttonIndex,
+  children,
+  className,
+}: {
+  onButtonChange: (idx: number, pressed: boolean) => void;
+  buttonIndex: number;
+  children: React.ReactNode;
+  className?: string;
+}) => {
+  return (
+    <Button
+      variant="outline"
+      className={`w-12 h-12 ${className || ""}`}
+      onMouseDown={() => onButtonChange(buttonIndex, true)}
+      onMouseUp={() => onButtonChange(buttonIndex, false)}
+      onTouchStart={(e) => {
+        e.preventDefault();
+        onButtonChange(buttonIndex, true);
+      }}
+      onTouchEnd={(e) => {
+        e.preventDefault();
+        onButtonChange(buttonIndex, false);
+      }}
+    >
+      {children}
+    </Button>
+  );
+};
+
 export function DisplayUnit({
   framebuffer,
   vram,
-  sevenSegmentValue,
+  sevenSegmentMemory,
   flipTrigger,
+  onButtonChange,
 }: DisplayUnitProps) {
   const screenCanvasRef = useRef<HTMLCanvasElement>(null);
   const bufferCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -127,8 +161,14 @@ export function DisplayUnit({
     if (canvas) drawPixels(canvas.getContext("2d")!, vram);
   }, [vram]);
 
-  const leftDigit = (sevenSegmentValue >> 4) & 0xf;
-  const rightDigit = sevenSegmentValue & 0xf;
+  const digits = [
+    (sevenSegmentMemory[0] >> 4) & 0xf,
+    sevenSegmentMemory[0] & 0xf,
+    (sevenSegmentMemory[1] >> 4) & 0xf,
+    sevenSegmentMemory[1] & 0xf,
+    (sevenSegmentMemory[2] >> 4) & 0xf,
+    sevenSegmentMemory[2] & 0xf,
+  ];
 
   return (
     <Card>
@@ -162,12 +202,77 @@ export function DisplayUnit({
             </div>
           </TabsContent>
         </Tabs>
-        <Separator orientation="vertical" className="h-24 hidden md:block" />
-        <div className="flex flex-col items-center gap-2">
-          <Label>I/O Port: 0xFF</Label>
-          <div className="flex gap-2">
-            <SevenSegmentDigit value={leftDigit} />
-            <SevenSegmentDigit value={rightDigit} />
+        <Separator orientation="vertical" className="h-48 hidden md:block" />
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center gap-2">
+            <Label>I/O Port: 0xF0-0xF2</Label>
+            <div className="flex gap-1">
+              {digits.map((digit, index) => (
+                <SevenSegmentDigit key={index} value={digit} />
+              ))}
+            </div>
+            <div className="flex items-center justify-center gap-8 p-4">
+              <div className="grid grid-cols-3 grid-rows-3 gap-1 w-36 h-36">
+                <ControlButton
+                  buttonIndex={0}
+                  onButtonChange={onButtonChange}
+                  className="col-start-2 row-start-1 rounded-full bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
+                >
+                  <ArrowUp size={24} />
+                </ControlButton>
+                <ControlButton
+                  buttonIndex={2}
+                  onButtonChange={onButtonChange}
+                  className="col-start-1 row-start-2 rounded-full bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
+                >
+                  <ArrowLeft size={24} />
+                </ControlButton>
+                <ControlButton
+                  buttonIndex={3}
+                  onButtonChange={onButtonChange}
+                  className="col-start-3 row-start-2 rounded-full bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
+                >
+                  <ArrowRight size={24} />
+                </ControlButton>
+                <ControlButton
+                  buttonIndex={1}
+                  onButtonChange={onButtonChange}
+                  className="col-start-2 row-start-3 rounded-full bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
+                >
+                  <ArrowDown size={24} />
+                </ControlButton>
+              </div>
+              <div className="flex flex-col gap-2">
+                <ControlButton
+                  buttonIndex={4}
+                  onButtonChange={onButtonChange}
+                  className="rounded-full bg-rose-400 hover:bg-rose-500 text-white font-bold text-lg"
+                >
+                  A
+                </ControlButton>
+                <ControlButton
+                  buttonIndex={5}
+                  onButtonChange={onButtonChange}
+                  className="rounded-full bg-amber-400 hover:bg-amber-500 text-white font-bold text-lg"
+                >
+                  B
+                </ControlButton>
+                <ControlButton
+                  buttonIndex={6}
+                  onButtonChange={onButtonChange}
+                  className="rounded-full bg-emerald-400 hover:bg-emerald-500 text-white font-bold text-lg"
+                >
+                  C
+                </ControlButton>
+                <ControlButton
+                  buttonIndex={7}
+                  onButtonChange={onButtonChange}
+                  className="rounded-full bg-sky-400 hover:bg-sky-500 text-white font-bold text-lg"
+                >
+                  D
+                </ControlButton>
+              </div>
+            </div>
           </div>
         </div>
       </CardContent>
