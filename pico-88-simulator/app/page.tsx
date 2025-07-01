@@ -4,6 +4,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bug, Github, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Pico88Icon } from "@/components/ui/pico88-icon";
 
 export default function Home() {
   return (
@@ -12,9 +13,15 @@ export default function Home() {
         <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center space-x-6">
-              <h1 className="text-xl font-mono font-semibold text-foreground/80 tracking-wider">
-                Pico88
-              </h1>
+              <div className="flex items-center space-x-2">
+                <Pico88Icon
+                  className="h-5 w-5 text-foreground/70"
+                  enableDownload={true}
+                />
+                <h1 className="text-xl font-mono font-semibold text-foreground/80 tracking-wider">
+                  Pico88
+                </h1>
+              </div>
               <TabsList className="grid grid-cols-2">
                 <TabsTrigger value="simulator" className="text-sm">
                   シミュレータ
