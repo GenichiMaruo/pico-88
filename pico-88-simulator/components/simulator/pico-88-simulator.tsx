@@ -124,8 +124,8 @@ export function Pico88Simulator() {
 
   return (
     <>
-      <div className="flex flex-col lg:flex-row h-[calc(100vh-2rem)] w-full p-4 gap-4 bg-background">
-        <div className="w-full lg:w-1/2 flex flex-col gap-4 overflow-y-auto">
+      <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-2rem)] w-full p-4 gap-4 bg-background">
+        <div className="w-full lg:w-1/2 flex flex-col gap-4 lg:overflow-y-auto">
           <CodeEditor onAssembleRequest={handleAssembleAndLoad} />
           <MemoryView
             mainMemory={cpuSnapshot.mainMemory}
@@ -135,7 +135,7 @@ export function Pico88Simulator() {
             sp={cpuSnapshot.sp}
           />
         </div>
-        <div className="w-full lg:w-1/2 flex flex-col gap-4 overflow-y-auto">
+        <div className="w-full lg:w-1/2 flex flex-col gap-4 lg:overflow-y-auto">
           <DisplayUnit
             framebuffer={cpuSnapshot.framebuffer}
             vram={cpuSnapshot.vram}
