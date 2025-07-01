@@ -8,16 +8,73 @@ export type AssembleResult = {
   errorLine?: number;
 };
 
+// ディレクティブ処理用のヘルパー関数
+const parseStringLiteral = (str: string): number[] => {
+  if (str.startsWith('"') && str.endsWith('"')) {
+    return Array.from(str.slice(1, -1)).map((c) => c.charCodeAt(0));
+  }
+  return [];
+};
+
+const parseDataBytes = (
+  operands: string[],
+  constants?: Map<string, number>
+): number[] => {
+  const result: number[] = [];
+  for (const operand of operands) {
+    const trimmed = operand.trim();
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      // 文字列リテラル
+      result.push(...parseStringLiteral(trimmed));
+    } else {
+      // 数値
+      const value = parseValue(trimmed, constants);
+      if (value !== null && value >= 0 && value <= 255) {
+        result.push(value);
+      } else {
+        throw new Error(`Invalid byte value: ${trimmed}`);
+      }
+    }
+  }
+  return result;
+};
+
+const parseDataWords = (
+  operands: string[],
+  constants?: Map<string, number>
+): number[] => {
+  const result: number[] = [];
+  for (const operand of operands) {
+    const value = parseValue(operand.trim(), constants);
+    if (value !== null && value >= 0 && value <= 65535) {
+      // リトルエンディアンで格納
+      result.push(value & 0xff, (value >> 8) & 0xff);
+    } else {
+      throw new Error(`Invalid word value: ${operand}`);
+    }
+  }
+  return result;
+};
+
 // (parseRegister, parseValue関数は変更なし)
 const parseRegister = (reg: string): number | null => {
   if (!reg || !/^[Rr][0-3]$/.test(reg)) return null;
   return parseInt(reg.substring(1), 10);
 };
-const parseValue = (val: string): number | null => {
+const parseValue = (
+  val: string,
+  constants?: Map<string, number>
+): number | null => {
   if (!val) return null;
   const v = val.startsWith("#") ? val.substring(1) : val;
   if (v.toLowerCase().startsWith("0x")) return parseInt(v.substring(2), 16);
   if (/^\d+$/.test(v)) return parseInt(v, 10);
+
+  // 定数テーブルから検索
+  if (constants && constants.has(v.toUpperCase())) {
+    return constants.get(v.toUpperCase())!;
+  }
+
   return null;
 };
 
@@ -26,6 +83,7 @@ export function assemble(sourceCode: string): AssembleResult {
   const bytecode: number[] = [];
   const sourceMap = new Map<number, number>();
   const labels = new Map<string, number>();
+  const constants = new Map<string, number>(); // .equ用の定数テーブル
   const patches: {
     line: number;
     type: "J" | "I" | "A";
@@ -33,17 +91,22 @@ export function assemble(sourceCode: string): AssembleResult {
     offset: number;
   }[] = [];
 
-  // 1パス目: ラベルを収集し、アドレスを計算
+  // 1パス目: ディレクティブの処理、ラベルを収集し、アドレスを計算
   let currentAddress = 0;
+  let origin = 0; // .orgディレクティブで設定される開始アドレス
+
   for (let i = 0; i < lines.length; i++) {
     const lineNumber = i + 1;
     const line = lines[i].split("//")[0].trim();
     if (!line) continue;
+
     const commands = line
       .split(";")
       .map((cmd) => cmd.trim())
       .filter((cmd) => cmd);
+
     for (const command of commands) {
+      // ラベル定義
       if (command.endsWith(":")) {
         const label = command.slice(0, -1).trim().toUpperCase();
         if (!/^[A-Z_][A-Z0-9_]*$/i.test(label))
@@ -63,41 +126,189 @@ export function assemble(sourceCode: string): AssembleResult {
         labels.set(label, currentAddress);
         continue;
       }
+
       const parts = command
         .replace(/,/g, " ")
         .split(/\s+/)
         .filter((s) => s);
       if (parts.length === 0) continue;
 
+      const directive = parts[0].toLowerCase();
+
+      // ディレクティブの処理
+      if (directive === ".org") {
+        if (parts.length < 2) {
+          return {
+            bytecode: new Uint8Array(),
+            sourceMap,
+            error: ".org directive requires an address",
+            errorLine: lineNumber,
+          };
+        }
+        const addr = parseValue(parts[1], constants);
+        if (addr === null || addr < 0 || addr > 65535) {
+          return {
+            bytecode: new Uint8Array(),
+            sourceMap,
+            error: `Invalid .org address: ${parts[1]}`,
+            errorLine: lineNumber,
+          };
+        }
+        origin = addr;
+        currentAddress = addr;
+        continue;
+      }
+
+      if (directive === ".equ") {
+        if (parts.length < 3) {
+          return {
+            bytecode: new Uint8Array(),
+            sourceMap,
+            error: ".equ directive requires label and value",
+            errorLine: lineNumber,
+          };
+        }
+        const label = parts[1].replace(":", "").toUpperCase();
+        const value = parseValue(parts[2], constants);
+        if (value === null) {
+          return {
+            bytecode: new Uint8Array(),
+            sourceMap,
+            error: `Invalid .equ value: ${parts[2]}`,
+            errorLine: lineNumber,
+          };
+        }
+        constants.set(label, value);
+        continue;
+      }
+
+      if (directive === ".db") {
+        try {
+          const dataBytes = parseDataBytes(parts.slice(1), constants);
+          currentAddress += dataBytes.length;
+        } catch (error) {
+          return {
+            bytecode: new Uint8Array(),
+            sourceMap,
+            error: `${error}`,
+            errorLine: lineNumber,
+          };
+        }
+        continue;
+      }
+
+      if (directive === ".dw") {
+        try {
+          const dataWords = parseDataWords(parts.slice(1), constants);
+          currentAddress += dataWords.length;
+        } catch (error) {
+          return {
+            bytecode: new Uint8Array(),
+            sourceMap,
+            error: `${error}`,
+            errorLine: lineNumber,
+          };
+        }
+        continue;
+      }
+
+      // 旧DBディレクティブ（後方互換性のため維持）
       if (parts[0].toUpperCase() === "DB") {
         currentAddress += parts.length - 1;
       } else {
+        // 通常の命令
         currentAddress += 2;
       }
     }
   }
 
   // 2パス目: バイトコードを生成
-  currentAddress = 0;
+  currentAddress = origin; // .orgで設定された開始アドレスから開始
+
   for (let i = 0; i < lines.length; i++) {
     const lineNumber = i + 1;
     const line = lines[i].split("//")[0].trim();
     if (!line) continue;
+
     const commands = line
       .split(";")
       .map((cmd) => cmd.trim())
       .filter((cmd) => cmd);
+
     for (const command of commands) {
       if (command.endsWith(":")) continue;
+
+      const parts = command
+        .replace(/,/g, " ")
+        .split(/\s+/)
+        .filter((s) => s);
+      if (parts.length === 0) continue;
+
+      const directive = parts[0].toLowerCase();
+
+      // ディレクティブの処理
+      if (directive === ".org") {
+        const addr = parseValue(parts[1], constants);
+        if (addr !== null) {
+          currentAddress = addr;
+        }
+        continue;
+      }
+
+      if (directive === ".equ") {
+        // .equは1パス目で処理済み
+        continue;
+      }
+
+      if (directive === ".db") {
+        try {
+          const dataBytes = parseDataBytes(parts.slice(1), constants);
+          for (const byte of dataBytes) {
+            bytecode.push(byte);
+            sourceMap.set(currentAddress, lineNumber);
+            currentAddress++;
+          }
+        } catch (error) {
+          return {
+            bytecode: new Uint8Array(),
+            sourceMap,
+            error: `${error}`,
+            errorLine: lineNumber,
+          };
+        }
+        continue;
+      }
+
+      if (directive === ".dw") {
+        try {
+          const dataWords = parseDataWords(parts.slice(1), constants);
+          for (const byte of dataWords) {
+            bytecode.push(byte);
+            sourceMap.set(currentAddress, lineNumber);
+            currentAddress++;
+          }
+        } catch (error) {
+          return {
+            bytecode: new Uint8Array(),
+            sourceMap,
+            error: `${error}`,
+            errorLine: lineNumber,
+          };
+        }
+        continue;
+      }
+
+      // 旧DBディレクティブの処理（後方互換性）
       const mnemonic = command.split(/\s+/)[0].toUpperCase();
       const operandStr = command.substring(mnemonic.length).trim();
       let operands = operandStr
         .replace(/,/g, " ")
         .split(/\s+/)
         .filter((s) => s);
+
       if (mnemonic === "DB") {
         for (const op of operands) {
-          const value = parseValue(op);
+          const value = parseValue(op, constants);
           if (value === null || value < 0 || value > 255)
             return {
               bytecode: new Uint8Array(),
@@ -235,7 +446,7 @@ export function assemble(sourceCode: string): AssembleResult {
             };
           if (!isBank) highByte |= rd << 2;
           if (instruction.op === 0xd) highByte |= instruction.sub;
-          const value = parseValue(valueOperand);
+          const value = parseValue(valueOperand, constants);
           if (value === null) {
             const labelName = valueOperand.startsWith("#")
               ? valueOperand.substring(1)
@@ -288,7 +499,7 @@ export function assemble(sourceCode: string): AssembleResult {
             };
           highByte |= rd_or_rs << 2;
           highByte |= instruction.sub & 0x3;
-          const value = parseValue(operands[1]);
+          const value = parseValue(operands[1], constants);
           if (value === null) {
             patches.push({
               line: lineNumber,
