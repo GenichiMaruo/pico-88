@@ -2,7 +2,7 @@
 
 ![PICO-88 Logo](https://img.shields.io/badge/PICO--88-Simulator-blue?style=for-the-badge)
 [![GitHub License](https://img.shields.io/github/license/GenichiMaruo/pico-88?style=for-the-badge)](LICENSE)
-[![Live Demo](https://img.shields.io/badge/Live-Demo-green?style=for-the-badge)](https://pico88-simulator.vercel.app)
+[![Live Demo](https://img.shields.io/badge/Live-Demo-green?style=for-the-badge)](https://pico88.maru1010.com)
 
 **偉大な8ビットパソコンの魂を受け継いだ親しみやすい小さなコンピュータ**
 
@@ -44,7 +44,7 @@ PICO-88は、教育およびホビー用途を目的として設計された、�
 
 ## 🌐 オンラインシミュレータ
 
-**[→ PICO-88 シミュレータを試す](https://pico88-simulator.vercel.app)**
+**[→ PICO-88 シミュレータを試す](https://pico88.maru1010.com)**
 
 ブラウザで即座にPICO-88を体験できます。インストール不要で、以下の機能が利用できます：
 
@@ -120,7 +120,7 @@ CONST: .equ 42   ; 定数定義
 - グラフィックシステム
 
 ### 🔗 関連リンク
-- [オンラインシミュレータ](https://pico88-simulator.vercel.app)
+- [オンラインシミュレータ](https://pico88.maru1010.com)
 - [GitHub Issues](https://github.com/GenichiMaruo/pico-88/issues) - バグ報告・機能要望
 - [作者のページ](https://maru1010.com/)
 
@@ -185,5 +185,5 @@ npm run dev
 
 <div align="center">
   <p><strong>🎮 PICO-88で8ビットコンピューティングの世界を探検しよう！</strong></p>
-  <p><a href="https://pico88-simulator.vercel.app">今すぐ始める →</a></p>
+  <p><a href="https://pico88.maru1010.com">今すぐ始める →</a></p>
 </div>
