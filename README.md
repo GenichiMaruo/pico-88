@@ -140,33 +140,6 @@ CONST: .equ 42   ; 定数定義
 
 ## 🎓 学習リソース
 
-### サンプルプログラム
-```assembly
-; Hello World プログラム
-.org 0x0100
-
-MAIN:
-    LD R0, 0x48      ; 'H'
-    ST [0x2000], R0  ; 画面に出力
-    LD R0, 0x65      ; 'e'
-    ST [0x2001], R0
-    ; ...
-    HALT
-
-; カウンタプログラム
-COUNTER: .equ 10
-
-LOOP:
-    LD R0, COUNTER
-    CMP R0, 0
-    JZ END
-    DEC R0
-    ST [COUNTER], R0
-    JMP LOOP
-END:
-    HALT
-```
-
 ### 学習ステップ
 1. **基本概念**: CPUとメモリの関係を理解
 2. **アセンブリ**: 簡単な命令から始める
