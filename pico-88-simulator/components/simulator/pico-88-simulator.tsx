@@ -20,7 +20,8 @@ type CpuSnapshot = {
   mainMemory: Uint8Array;
   framebuffer: Uint8Array;
   vram: Uint8Array;
-  sevenSegmentValue: number;
+  sevenSegmentMemory: Uint8Array;
+  stackMemory: Uint8Array;
   lastAccessedBank: number;
   isHalted: boolean;
 };
@@ -36,7 +37,8 @@ export function Pico88Simulator() {
     mainMemory: new Uint8Array(cpuRef.current.mainMemory),
     framebuffer: new Uint8Array(cpuRef.current.framebuffer),
     vram: new Uint8Array(cpuRef.current.vram),
-    sevenSegmentValue: cpuRef.current.sevenSegmentValue,
+    sevenSegmentMemory: new Uint8Array(cpuRef.current.sevenSegmentMemory),
+    stackMemory: new Uint8Array(cpuRef.current.stackMemory),
     lastAccessedBank: cpuRef.current.lastAccessedBank,
     isHalted: cpuRef.current.isHalted,
   });
@@ -55,7 +57,8 @@ export function Pico88Simulator() {
       mainMemory: new Uint8Array(cpu.mainMemory),
       framebuffer: new Uint8Array(cpu.framebuffer),
       vram: new Uint8Array(cpu.vram),
-      sevenSegmentValue: cpu.sevenSegmentValue,
+      sevenSegmentMemory: new Uint8Array(cpu.sevenSegmentMemory),
+      stackMemory: new Uint8Array(cpu.stackMemory),
       lastAccessedBank: cpu.lastAccessedBank,
       isHalted: cpu.isHalted,
     });
@@ -111,6 +114,14 @@ export function Pico88Simulator() {
     setFlipTrigger((t) => t + 1);
   }, [updateSnapshot]);
 
+  const handleButtonChange = useCallback(
+    (buttonIndex: number, isPressed: boolean) => {
+      cpuRef.current.setButtonState(buttonIndex, isPressed);
+      updateSnapshot();
+    },
+    [updateSnapshot]
+  );
+
   return (
     <>
       <div className="flex flex-col lg:flex-row h-[calc(100vh-2rem)] w-full p-4 gap-4 bg-background">
@@ -118,6 +129,7 @@ export function Pico88Simulator() {
           <CodeEditor onAssembleRequest={handleAssembleAndLoad} />
           <MemoryView
             mainMemory={cpuSnapshot.mainMemory}
+            stackMemory={cpuSnapshot.stackMemory}
             activeBank={cpuSnapshot.lastAccessedBank}
             pc={cpuSnapshot.pc}
             sp={cpuSnapshot.sp}
@@ -127,8 +139,9 @@ export function Pico88Simulator() {
           <DisplayUnit
             framebuffer={cpuSnapshot.framebuffer}
             vram={cpuSnapshot.vram}
-            sevenSegmentValue={cpuSnapshot.sevenSegmentValue}
+            sevenSegmentMemory={cpuSnapshot.sevenSegmentMemory}
             flipTrigger={flipTrigger}
+            onButtonChange={handleButtonChange}
           />
           <ControlPanel
             isRunning={isRunning}
@@ -139,7 +152,6 @@ export function Pico88Simulator() {
             onReset={handleReset}
             onSpeedChange={setSpeed}
           />
-          {/* ★更新点: 横並びのgridを外し、縦並びのflexコンテナにする */}
           <CpuStatus
             registers={cpuSnapshot.registers}
             pc={cpuSnapshot.pc}
@@ -149,9 +161,8 @@ export function Pico88Simulator() {
             activeBank={cpuSnapshot.lastAccessedBank}
           />
           <StackView
-            mainMemory={cpuSnapshot.mainMemory}
+            stackMemory={cpuSnapshot.stackMemory}
             sp={cpuSnapshot.sp}
-            activeBank={cpuSnapshot.lastAccessedBank}
           />
         </div>
       </div>
