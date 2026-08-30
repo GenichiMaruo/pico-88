@@ -14,6 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://pico88.maru1010.com"),
   title: "Pico88 - 8ビットCPUシミュレータ",
   description:
     "教育およびホビー用途向けの8ビットマイクロプロセッサ「PICO-88」のWebベースシミュレータ。アセンブリ言語の学習やレトロコンピューティングの体験ができます。",

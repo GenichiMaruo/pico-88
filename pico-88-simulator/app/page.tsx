@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { Pico88Simulator } from "@/components/simulator/pico-88-simulator";
 import { Pico88Specification } from "@/components/pico-88-specification";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -9,9 +12,11 @@ import { Button } from "@/components/ui/button";
 import { Pico88Icon } from "@/components/ui/pico88-icon";
 
 export default function Home() {
+  const [activeTab, setActiveTab] = useState("simulator");
+
   return (
     <div className="min-h-screen bg-background">
-      <Tabs defaultValue="simulator" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           {/* デスクトップヘッダー */}
           <div className="px-4 py-3">
@@ -95,11 +100,19 @@ export default function Home() {
         </header>
 
         <main className="px-4 py-6">
-          <TabsContent value="simulator">
-            <Pico88Simulator />
+          <TabsContent
+            value="simulator"
+            forceMount
+            className="data-[state=inactive]:hidden"
+          >
+            <Pico88Simulator isActive={activeTab === "simulator"} />
           </TabsContent>
 
-          <TabsContent value="specification">
+          <TabsContent
+            value="specification"
+            forceMount
+            className="data-[state=inactive]:hidden"
+          >
             <Pico88Specification />
           </TabsContent>
         </main>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { Pico88CPU } from "@/core/pico-88-cpu";
 import { assemble } from "@/core/assembler";
 import { CodeEditor } from "./code-editor";
@@ -26,67 +26,54 @@ type CpuSnapshot = {
   isHalted: boolean;
 };
 
-export function Pico88Simulator() {
-  const cpuRef = useRef(new Pico88CPU());
+const takeSnapshot = (cpu: Pico88CPU): CpuSnapshot => ({
+  registers: new Uint8Array(cpu.registers),
+  pc: cpu.pc,
+  sp: cpu.sp,
+  flags: { ...cpu.flags },
+  mainMemory: new Uint8Array(cpu.mainMemory),
+  framebuffer: new Uint8Array(cpu.framebuffer),
+  vram: new Uint8Array(cpu.vram),
+  sevenSegmentMemory: new Uint8Array(cpu.sevenSegmentMemory),
+  stackMemory: new Uint8Array(cpu.stackMemory),
+  lastAccessedBank: cpu.lastAccessedBank,
+  isHalted: cpu.isHalted,
+});
 
-  const [cpuSnapshot, setCpuSnapshot] = useState<CpuSnapshot>({
-    registers: new Uint8Array(cpuRef.current.registers),
-    pc: cpuRef.current.pc,
-    sp: cpuRef.current.sp,
-    flags: { ...cpuRef.current.flags },
-    mainMemory: new Uint8Array(cpuRef.current.mainMemory),
-    framebuffer: new Uint8Array(cpuRef.current.framebuffer),
-    vram: new Uint8Array(cpuRef.current.vram),
-    sevenSegmentMemory: new Uint8Array(cpuRef.current.sevenSegmentMemory),
-    stackMemory: new Uint8Array(cpuRef.current.stackMemory),
-    lastAccessedBank: cpuRef.current.lastAccessedBank,
-    isHalted: cpuRef.current.isHalted,
-  });
+export function Pico88Simulator({ isActive = true }: { isActive?: boolean }) {
+  const [cpu] = useState(() => new Pico88CPU());
+  const [cpuSnapshot, setCpuSnapshot] = useState<CpuSnapshot>(() =>
+    takeSnapshot(cpu)
+  );
 
   const [isRunning, setIsRunning] = useState(false);
   const [speed, setSpeed] = useState(10);
   const [flipTrigger, setFlipTrigger] = useState(0);
 
   const updateSnapshot = useCallback(() => {
-    const cpu = cpuRef.current;
-    setCpuSnapshot({
-      registers: new Uint8Array(cpu.registers),
-      pc: cpu.pc,
-      sp: cpu.sp,
-      flags: { ...cpu.flags },
-      mainMemory: new Uint8Array(cpu.mainMemory),
-      framebuffer: new Uint8Array(cpu.framebuffer),
-      vram: new Uint8Array(cpu.vram),
-      sevenSegmentMemory: new Uint8Array(cpu.sevenSegmentMemory),
-      stackMemory: new Uint8Array(cpu.stackMemory),
-      lastAccessedBank: cpu.lastAccessedBank,
-      isHalted: cpu.isHalted,
-    });
-  }, []);
+    setCpuSnapshot(takeSnapshot(cpu));
+  }, [cpu]);
 
   const handleStep = useCallback(() => {
-    const cpu = cpuRef.current;
     const pcAddr = cpu.pc;
     const opBefore = cpu.mainMemory[pcAddr] >> 4;
     const subOpBefore = cpu.mainMemory[pcAddr + 1];
     cpu.step();
+    if (cpu.isHalted) setIsRunning(false);
     if (opBefore === 0xf && (subOpBefore === 0x10 || subOpBefore === 0x11)) {
       setFlipTrigger((prev) => prev + 1);
     }
     updateSnapshot();
-  }, [updateSnapshot]);
+  }, [cpu, updateSnapshot]);
 
   useEffect(() => {
-    if (!isRunning || cpuRef.current.isHalted) {
-      setIsRunning(false);
-      return;
-    }
+    if (!isRunning || cpu.isHalted || !isActive) return;
     const interval = 1000 / speed;
     const timerId = setInterval(() => {
       handleStep();
     }, interval);
     return () => clearInterval(timerId);
-  }, [isRunning, speed, handleStep]);
+  }, [isRunning, speed, handleStep, cpu, isActive]);
 
   const handleAssembleAndLoad = useCallback(
     (code: string) => {
@@ -96,7 +83,7 @@ export function Pico88Simulator() {
           description: result.error,
         });
       } else {
-        cpuRef.current.loadProgram(result.bytecode);
+        cpu.loadProgram(result.bytecode);
         updateSnapshot();
         setFlipTrigger(0);
         toast.success("アセンブル成功", {
@@ -104,22 +91,22 @@ export function Pico88Simulator() {
         });
       }
     },
-    [updateSnapshot]
+    [cpu, updateSnapshot]
   );
 
   const handleReset = useCallback(() => {
     setIsRunning(false);
-    cpuRef.current.reset();
+    cpu.reset();
     updateSnapshot();
     setFlipTrigger((t) => t + 1);
-  }, [updateSnapshot]);
+  }, [cpu, updateSnapshot]);
 
   const handleButtonChange = useCallback(
     (buttonIndex: number, isPressed: boolean) => {
-      cpuRef.current.setButtonState(buttonIndex, isPressed);
+      cpu.setButtonState(buttonIndex, isPressed);
       updateSnapshot();
     },
-    [updateSnapshot]
+    [cpu, updateSnapshot]
   );
 
   return (

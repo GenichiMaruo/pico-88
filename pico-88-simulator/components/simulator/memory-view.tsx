@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
@@ -60,17 +60,10 @@ export function MemoryView({
   );
   const [isAutoFollow, setIsAutoFollow] = useState(true);
 
-  useEffect(() => {
-    if (isAutoFollow) {
-      setDisplayedTab(`bank-${activeBank}`);
-    }
-  }, [activeBank, isAutoFollow]);
+  const selectedTab = isAutoFollow ? `bank-${activeBank}` : displayedTab;
 
   const handleAutoFollowChange = (checked: boolean) => {
     setIsAutoFollow(checked);
-    if (checked) {
-      setDisplayedTab(`bank-${activeBank}`);
-    }
   };
 
   const handleTabChange = (value: string) => {
@@ -132,7 +125,7 @@ export function MemoryView({
       </CardHeader>
       <CardContent className="flex-grow">
         <Tabs
-          value={displayedTab}
+          value={selectedTab}
           onValueChange={handleTabChange}
           className="flex flex-col h-full"
         >
