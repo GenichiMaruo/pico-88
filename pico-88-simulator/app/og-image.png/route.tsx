@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const runtime = "nodejs";
+export const dynamic = "force-static";
 
 export async function GET() {
   return new ImageResponse(
@@ -40,7 +40,6 @@ export async function GET() {
             flexDirection: "column",
             alignItems: "center",
             textAlign: "center",
-            zIndex: 1,
           }}
         >
           {/* Logo/Icon */}
